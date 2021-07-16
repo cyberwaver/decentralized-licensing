@@ -1,6 +1,9 @@
 {
   "dependencies": {
     "@openzeppelin/contracts": "^4.2.0",
-    "solc": "^0.8.6"
+    "global": "^4.4.0",
+    "ipfs-http-client": "^50.1.2",
+    "solc": "^0.8.6",
+    "truffle-flattener": "^1.5.0"
   }
 }
