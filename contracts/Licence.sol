@@ -35,7 +35,8 @@ contract Licence is ERC1155 {
         SplitReceiver[] splitReceivers;
     }
 
-    struct TokenOwnership {
+    struct TokenCopyOwnership {
+        address owner;
         uint256 datePurchased;
         uint256 dateRenewed;
     }
@@ -45,8 +46,9 @@ contract Licence is ERC1155 {
     mapping (uint256 => Song) public _songs;
     //address => list of song IDs
     mapping (address => uint256[]) public _addressSongIds;
-    mapping (string => uint256[]) public _groupTokens;
-    mapping (address => mapping (uint256 => TokenOwnership)) public _addressTokens;
+    mapping (address => uint256[]) public _addressCreatedTokenIds;
+    mapping (address => uint256[]) public _addressPurchasedTokenIds;
+    mapping (address => mapping (uint256 => TokenCopyOwnership)) public _addressTokenCopies;
 
     event LicenceTokenCreated(uint256 indexed tokenId);
     event LicenceTokenPurchased(uint256 indexed tokenId, address indexed purchaser, uint256 amountPaid, uint256 remunerationBalance);
@@ -133,8 +135,10 @@ contract Licence is ERC1155 {
         _licenceTokens[tokenId].uri = tokenURI;
         _licenceTokens[tokenId].quantity = quantity;
         _licenceTokens[tokenId].creator = operator;
+        _licenceTokens[tokenId].id = tokenId;
         _setTokenSplitReceiver(splitReceivers, tokenId);
         _songs[songId].licenceTokenIds.push(tokenId);
+        _addressCreatedTokenIds[operator].push(tokenId);
         emit LicenceTokenCreated(tokenId);
 }
 
@@ -158,23 +162,28 @@ contract Licence is ERC1155 {
 
     function purchaseLicence(uint256 tokenId) external payable licenceTokenShouldBeActive(tokenId) tokenCreatorNotAllowed(tokenId) {
         uint256 tokenEtherAmount = _licenceTokens[tokenId].etherAmount;
-        require(tokenEtherAmount == msg.value, "ERC1155: incorrect amount of ether sent");
         address operator = _msgSender();
+        TokenCopyOwnership memory operatorCopy = _addressTokenCopies[operator][tokenId];
+        require(operatorCopy.datePurchased == 0, "ERC1155: address cannot purchase the same token more than once");
+        require(tokenEtherAmount == msg.value, "ERC1155: incorrect amount of ether sent");
         _transferLicenceToken(tokenId, operator);
         uint256 remunerationBalance = _remunerateTokenSplitReceivers(tokenId);
         _licenceTokens[tokenId].remunerationBalance += remunerationBalance;
-        _addressTokens[operator][tokenId].datePurchased = block.timestamp;
+        _addressTokenCopies[operator][tokenId].datePurchased = block.timestamp;
+        _addressPurchasedTokenIds[operator].push(tokenId);
         emit LicenceTokenPurchased(tokenId, operator, tokenEtherAmount, remunerationBalance);
     }
 
     function renewLicence(uint256 tokenId) external payable licenceTokenShouldBeActive(tokenId) tokenCreatorNotAllowed(tokenId) {
         uint256 tokenEtherAmount = _licenceTokens[tokenId].etherAmount;
-        require(tokenEtherAmount == msg.value, "ERC1155: incorrect amount of ether sent");
         address operator = _msgSender();
+        TokenCopyOwnership memory operatorCopy = _addressTokenCopies[operator][tokenId];
+        require(operatorCopy.datePurchased > 0, "ERC1155: address have not purchased token");
+        require(tokenEtherAmount == msg.value, "ERC1155: incorrect amount of ether sent");
         _transferLicenceToken(tokenId, operator);
         uint256 remunerationBalance = _remunerateTokenSplitReceivers(tokenId);
         _licenceTokens[tokenId].remunerationBalance += remunerationBalance;
-        _addressTokens[operator][tokenId].dateRenewed = block.timestamp;
+        _addressTokenCopies[operator][tokenId].dateRenewed = block.timestamp;
         emit LicenceTokenRenewed(tokenId, operator, tokenEtherAmount, block.timestamp);
     }
 
@@ -186,9 +195,24 @@ contract Licence is ERC1155 {
         return _licenceTokens[tokenId];
     }  
 
+    function getSongTokens(uint256 songId) public view returns(uint256[] memory) {
+        return _songs[songId].licenceTokenIds;
+    }  
+ 
+
     function getAddressSongIds(address songId) public view returns(uint256[] memory) {
         return _addressSongIds[songId];
     }  
+
+
+    function getAddressCreatedTokens(address addressToUse) public view returns(uint256[] memory) {
+        return _addressCreatedTokenIds[addressToUse];
+    }  
+
+    function getAddressPurchasedTokens(address addressToUse) public view returns(uint256[] memory) {
+        return _addressPurchasedTokenIds[addressToUse];
+    }  
+
 
     // function safeTransferFrom() public {
     //     revert("Token transfer blocked");
